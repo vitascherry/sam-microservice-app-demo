@@ -1,0 +1,8 @@
+com\example\customerservice\lambda\RepositoryHandler.class
+com\example\customerservice\lambda\PostCustomer.class
+com\example\App.class
+com\example\customerservice\domain\Account.class
+com\example\customerservice\AccountServiceContract.class
+com\example\customerservice\domain\Customer.class
+com\example\customerservice\lambda\GetCustomer.class
+com\example\customerservice\lambda\GetCustomers.class

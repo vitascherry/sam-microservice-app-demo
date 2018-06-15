@@ -1,0 +1,451 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+
+  "Description": "Customer service AWS CloudFormation template that contains 3 AWS Lambda functions behind an API Gateway",
+
+  "Parameters": {
+    "S3Bucket": {
+      "Description": "The name of the S3 bucket that contains the source code of the Lambda function",
+      "Type": "String",
+      "Default": "sam-microservice-app-demo"
+    },
+
+    "S3Key": {
+      "Description": "The location and name of the source code .jar file",
+      "Type": "String",
+      "Default": "target/customerservice-1.0.jar"
+    }
+  },
+
+  "Resources": {
+    "CustomerTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 1,
+          "WriteCapacityUnits": 1
+        },
+        "TableName": "customer",
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "firstName",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "lastName",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "address",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "email",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ]
+      }
+    },
+
+    "GetCustomerLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": {"Ref": "S3Bucket"},
+          "S3Key": {"Ref": "S3Key"}
+        },
+        "Description": "Returns an customer object of specified id",
+        "Handler": "com.example.customerservice.lambda.GetCustomer::handleRequest",
+        "MemorySize": 128,
+        "Role": {"Fn::GetAtt": ["CustomerServiceRole", "Arn"]},
+        "Runtime": "java8",
+        "Timeout": 3
+      }
+    },
+
+    "GetCustomerLambdaPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:invokeFunction",
+        "FunctionName": {"Fn::GetAtt": ["GetCustomerLambda", "Arn"]},
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {"Fn::Join": ["", ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "CustomerServiceRestApi"}, "/*"]]}
+      }
+    },
+
+    "GetCustomersLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": {"Ref": "S3Bucket"},
+          "S3Key": {"Ref": "S3Key"}
+        },
+        "Description": "Returns limited array of customer objects",
+        "Handler": "com.example.customerservice.lambda.GetCustomers::handleRequest",
+        "MemorySize": 128,
+        "Role": {"Fn::GetAtt": ["CustomerServiceRole", "Arn"]},
+        "Runtime": "java8",
+        "Timeout": 3
+      }
+    },
+
+    "GetCustomersLambdaPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:invokeFunction",
+        "FunctionName": {"Fn::GetAtt": ["GetCustomersLambda", "Arn"]},
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {"Fn::Join": ["", ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "CustomerServiceRestApi"}, "/*"]]}
+      }
+    },
+
+    "PostCustomerLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": {"Ref": "S3Bucket"},
+          "S3Key": {"Ref": "S3Key"}
+        },
+        "Description": "Saves new customer object to db and returns newly saved object",
+        "Handler": "com.example.customerservice.lambda.PostCustomer::handleRequest",
+        "MemorySize": 128,
+        "Role": {"Fn::GetAtt": ["CustomerServiceRole", "Arn"]},
+        "Runtime": "java8",
+        "Timeout": 3
+      }
+    },
+
+    "PostCustomerLambdaPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:invokeFunction",
+        "FunctionName": {"Fn::GetAtt": ["PostCustomerLambda", "Arn"]},
+        "Principal": "apigateway.amazonaws.com",
+        "SourceArn": {"Fn::Join": ["", ["arn:aws:execute-api:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "CustomerServiceRestApi"}, "/*"]]}
+      }
+    },
+
+    "CustomerServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": ["sts:AssumeRole"]
+          }]
+        },
+        "Path": "/",
+        "Policies": [{
+          "PolicyName": "CustomerServiceLog",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": ["logs:*"],
+              "Resource": "arn:aws:logs:*:*:*"
+            }]
+          }
+        }, {
+          "PolicyName": "CustomerServiceExecute",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "1",
+                "Effect": "Allow",
+                "Action": [
+                  "dynamodb:Scan",
+                  "dynamodb:PutItem",
+                  "dynamodb:GetItem",
+                  "dynamodb:DeleteItem",
+                  "dynamodb:Query",
+                  "dynamodb:UpdateItem"
+                ],
+                "Resource": [
+                  {"Fn::Join" : ["", ["arn:aws:dynamodb:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":table/customer*"]]},
+                  {"Fn::Join" : ["", ["arn:aws:dynamodb:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":table/account*"]]}
+                ]
+              },
+              {
+                "Sid": "2",
+                "Effect": "Allow",
+                "Action": [
+                  "lambda:InvokeAsync",
+                  "lambda:InvokeFunction"
+                ],
+                "Resource": [
+                  {"Fn::Join" : ["", ["arn:aws:lambda:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":function:GetAccountsByCustomerIdFunction"]]}
+                ]
+              }
+            ]
+          }
+        }]
+      }
+    },
+
+    "CustomerServiceRestApi": {
+      "Type": "AWS::ApiGateway::RestApi",
+      "Properties": {
+        "Name": "API Gateway for Customer service",
+        "EndpointConfiguration": {
+          "Types": ["REGIONAL"]
+        },
+        "FailOnWarnings": true
+      }
+    },
+
+    "CustomerModel": {
+      "Type": "AWS::ApiGateway::Model",
+      "Properties": {
+        "ContentType": "application/json",
+        "Name": "Customer",
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "Schema": {
+          "$schema": "http://json-schema.org/draft-04/schema#",
+          "title": "Customer",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "firstName": {
+              "type": "string"
+            },
+            "lastName": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            }
+          },
+          "required": ["id", "firstName", "lastName", "address", "email"]
+        }
+      }
+    },
+
+    "CustomersModel": {
+      "Type": "AWS::ApiGateway::Model",
+      "Properties": {
+        "ContentType": "application/json",
+        "Name": "Customers",
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "Schema": {
+          "$schema": "http://json-schema.org/draft-04/schema#",
+          "title": "Customers",
+          "type": "array",
+          "items": {
+            "$ref": {"Fn::Join": ["", ["https://apigateway.amazonaws.com/restapis/", {"Ref": "CustomerServiceRestApi"}, "/models/", {"Ref": "CustomerModel"}]]}
+          }
+        }
+      }
+    },
+
+    "CreateCustomerModel": {
+      "Type": "AWS::ApiGateway::Model",
+      "Properties": {
+        "ContentType": "application/json",
+        "Name": "CreateCustomer",
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "Schema": {
+          "$schema": "http://json-schema.org/draft-04/schema#",
+          "title": "CreateCustomer",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "firstName": {
+              "type": "string"
+            },
+            "lastName": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            }
+          },
+          "required": ["firstName", "lastName", "address", "email"]
+        }
+      }
+    },
+
+    "CustomersRestResource": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "ParentId": {"Fn::GetAtt": ["CustomerServiceRestApi", "RootResourceId"]},
+        "PathPart": "customer"
+      }
+    },
+
+    "CustomersGetMethod": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "ResourceId": {"Ref": "CustomersRestResource"},
+        "HttpMethod": "GET",
+        "AuthorizationType": "NONE",
+        "Integration": {
+          "Type": "AWS",
+          "IntegrationHttpMethod": "POST",
+          "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["GetCustomersLambda", "Arn"]}, "/invocations"]]},
+          "IntegrationResponses": [{
+            "ResponseTemplates": {
+              "application/json": "$input.json('$.body')"
+            },
+            "ResponseParameters": {
+              "method.response.header.Link": "integration.response.body.headers.next"
+            },
+            "StatusCode": 200
+          }],
+          "PassthroughBehavior": "NEVER",
+          "RequestTemplates": {
+            "application/json": "{\"parameters\": {\"limit\": \"$input.params('limit')\", \"next\": \"$input.params('next')\"}}"
+          }
+        },
+        "RequestParameters": {
+          "method.request.querystring.limit": false,
+          "method.request.querystring.next": false
+        },
+        "MethodResponses": [{
+          "ResponseModels": {
+            "application/json": {"Ref": "CustomersModel"}
+          },
+          "ResponseParameters": {
+            "method.response.header.Link": true
+          },
+          "StatusCode": 200
+        }]
+      }
+    },
+
+    "CustomerPostMethod": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "ResourceId": {"Ref": "CustomersRestResource"},
+        "HttpMethod": "POST",
+        "AuthorizationType": "NONE",
+        "Integration": {
+          "Type": "AWS",
+          "IntegrationHttpMethod": "POST",
+          "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["PostCustomerLambda", "Arn"]}, "/invocations"]]},
+          "IntegrationResponses": [{
+            "ResponseTemplates": {
+              "application/json": "{}"
+            },
+            "ResponseParameters": {
+              "method.response.header.Location": "integration.response.body.headers.id"
+            },
+            "StatusCode": 201
+          }],
+          "PassthroughBehavior": "NEVER",
+          "RequestTemplates": {
+            "application/json": "{\"body\": $input.json('$')}"
+          }
+        },
+        "RequestModels": {
+          "application/json": {"Ref": "CreateCustomerModel"}
+        },
+        "MethodResponses": [{
+          "ResponseModels": {
+            "application/json": "Empty"
+          },
+          "ResponseParameters": {
+            "method.response.header.Location": true
+          },
+          "StatusCode": 201
+        }]
+      }
+    },
+
+    "CustomerRestResource": {
+      "Type": "AWS::ApiGateway::Resource",
+      "Properties": {
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "ParentId": {"Ref": "CustomersRestResource"},
+        "PathPart": "{customerId}"
+      }
+    },
+
+    "CustomerGetMethod": {
+      "Type": "AWS::ApiGateway::Method",
+      "Properties": {
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "ResourceId": {"Ref": "CustomerRestResource"},
+        "HttpMethod": "GET",
+        "AuthorizationType": "NONE",
+        "Integration": {
+          "Type": "AWS",
+          "IntegrationHttpMethod": "POST",
+          "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["GetCustomerLambda", "Arn"]}, "/invocations"]]},
+          "IntegrationResponses": [{
+            "ResponseTemplates": {
+              "application/json": "$input.json('$.body')"
+            },
+            "StatusCode": 200
+          }, {
+            "SelectionPattern": "^not found.*",
+            "ResponseTemplates": {
+              "application/json": "{}"
+            },
+            "StatusCode": 404
+          }],
+          "PassthroughBehavior": "NEVER",
+          "RequestTemplates": {
+            "application/json": "{\"id\": \"$input.params('customerId')\"}"
+          }
+        },
+        "RequestParameters": {
+          "method.request.path.customerId": true
+        },
+        "MethodResponses": [{
+          "ResponseModels": {
+            "application/json": {"Ref": "CustomerModel"}
+          },
+          "StatusCode": 200
+        }, {
+          "ResponseModels": {
+            "application/json": "Empty"
+          },
+          "StatusCode": 404
+        }]
+      }
+    },
+
+    "CustomerServiceRestApiDeployment": {
+      "Type": "AWS::ApiGateway::Deployment",
+      "Properties": {
+        "RestApiId": {"Ref": "CustomerServiceRestApi"},
+        "StageName": "prod"
+      },
+      "DependsOn": ["CustomerGetMethod", "CustomersGetMethod", "CustomerPostMethod"]
+    }
+  },
+
+  "Outputs": {
+    "RootUrl": {
+      "Description": "Root URL of the Customer service API gateway",
+      "Value": {"Fn::Join": ["", ["https://", {"Ref": "CustomerServiceRestApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com"]]}
+    }
+  }
+}

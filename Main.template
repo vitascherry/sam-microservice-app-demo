@@ -1,0 +1,72 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+
+  "Description": "Accumulative AWS CloudFormation template for 3 services",
+
+  "Parameters": {
+    "S3Bucket": {
+      "Description": "The name of the S3 bucket that contains the source code of the Lambda function",
+      "Type": "String"
+    },
+    "S3Artifacts": {
+      "Description": "Comma-delimited list of 3 services packages names which are located on the bucket in the /target dir",
+      "Type": "CommaDelimitedList",
+      "Default": "accountservice-1.0.jar, customerservice-1.0.jar, orderservice-1.0.jar"
+    },
+    "S3Templates": {
+      "Description": "Comma-delimited list of 3 services templates names which are located on the bucket in the /resources dir",
+      "Type": "CommaDelimitedList",
+      "Default": "AccountServiceStack.template, CustomerServiceStack.template, OrderServiceStack.template"
+    }
+  },
+
+  "Resources": {
+    "AccountServiceStack": {
+      "Type": "AWS::CloudFormation::Stack",
+      "Properties": {
+        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["0", {"Ref" : "S3Artifacts"}]}]]},
+        "TimeoutInMinutes": "60",
+        "Parameters": {
+          "S3Bucket": {"Ref": "S3Bucket"},
+          "S3Key": {"Fn::Join": ["", ["target/", {"Fn::Select" : ["0", {"Ref" : "S3Artifacts"}]}]]}
+        }
+      }
+    },
+
+    "CustomerServiceStack": {
+      "Type": "AWS::CloudFormation::Stack",
+      "Properties": {
+        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["1", {"Ref" : "S3Artifacts"}]}]]},
+        "TimeoutInMinutes": "60",
+        "Parameters": {
+          "S3Bucket": {"Ref": "S3Bucket"},
+          "S3Key": {"Fn::Join": ["", ["target/", {"Fn::Select" : ["1", {"Ref" : "S3Artifacts"}]}]]}
+        }
+      }
+    },
+
+    "OrderServiceStack": {
+      "Type": "AWS::CloudFormation::Stack",
+      "Properties": {
+        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["2", {"Ref" : "S3Artifacts"}]}]]},
+        "TimeoutInMinutes": "60",
+        "Parameters": {
+          "S3Bucket": {"Ref": "S3Bucket"},
+          "S3Key": {"Fn::Join": ["", ["target/", {"Fn::Select" : ["2", {"Ref" : "S3Artifacts"}]}]]}
+        }
+      }
+    }
+  },
+
+  "Outputs": {
+    "AccountServiceStackOutput" : {
+      "Value" : { "Fn::GetAtt" : [ "OrderServiceStack", "Outputs.RootUrl" ] }
+    },
+    "OrderServiceStackOutput": {
+      "Value" : { "Fn::GetAtt" : [ "AccountServiceStack", "Outputs.RootUrl" ] }
+    },
+    "CustomerServiceStackOutput" : {
+      "Value" : { "Fn::GetAtt" : [ "CustomerServiceStack", "Outputs.RootUrl" ] }
+    }
+  }
+}
