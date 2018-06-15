@@ -8,7 +8,7 @@ public class Account implements Serializable {
 
     private String id;
 
-    private String number;
+    private AccountStatus status;
 
     private int balance;
 
@@ -21,13 +21,6 @@ public class Account implements Serializable {
         this.customerId = customerId;
     }
 
-    public Account(String id, String number, int balance, String customerId) {
-        this.id = id;
-        this.number = number;
-        this.balance = balance;
-        this.customerId = customerId;
-    }
-
     public String getId() {
         return id;
     }
@@ -36,12 +29,12 @@ public class Account implements Serializable {
         this.id = id;
     }
 
-    public String getNumber() {
-        return number;
+    public AccountStatus getStatus() {
+        return status;
     }
 
-    public void setNumber(String number) {
-        this.number = number;
+    public void setStatus(AccountStatus status) {
+        this.status = status;
     }
 
     public int getBalance() {
@@ -58,5 +51,39 @@ public class Account implements Serializable {
 
     public void setCustomerId(String customerId) {
         this.customerId = customerId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        Account account = (Account) o;
+
+        if (id != null ? !id.equals(account.id) : account.id != null) {
+            return false;
+        }
+        return customerId != null ? customerId.equals(account.customerId) : account.customerId == null;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = id != null ? id.hashCode() : 0;
+        result = 31 * result + (customerId != null ? customerId.hashCode() : 0);
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "Account{" +
+               "id='" + id + '\'' +
+               ", status='" + status + '\'' +
+               ", balance=" + balance +
+               ", customerId='" + customerId + '\'' +
+               '}';
     }
 }

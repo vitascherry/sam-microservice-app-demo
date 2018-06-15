@@ -8,7 +8,6 @@ import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBTable;
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBTypeConvertedEnum;
 
 import java.io.Serializable;
-import java.util.Objects;
 
 @DynamoDBTable(tableName = "account")
 public class Account implements Serializable {
@@ -86,21 +85,27 @@ public class Account implements Serializable {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+
         Account account = (Account) o;
-        return Objects.equals(id, account.id);
+
+        if (id != null ? !id.equals(account.id) : account.id != null) {
+            return false;
+        }
+        return customerId != null ? customerId.equals(account.customerId) : account.customerId == null;
     }
 
     @Override
     public int hashCode() {
-
-        return Objects.hash(id);
+        int result = id != null ? id.hashCode() : 0;
+        result = 31 * result + (customerId != null ? customerId.hashCode() : 0);
+        return result;
     }
 
     @Override
     public String toString() {
         return "Account{" +
                "id='" + id + '\'' +
-               ", status='" + status + '\'' +
+               ", status=" + status +
                ", balance=" + balance +
                ", customerId='" + customerId + '\'' +
                '}';

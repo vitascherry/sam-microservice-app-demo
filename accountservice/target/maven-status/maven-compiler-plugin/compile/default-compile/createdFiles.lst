@@ -1,8 +1,0 @@
-com\example\accountservice\lambda\GetAccountsByCustomerId.class
-com\example\accountservice\lambda\GetAccount.class
-com\example\App.class
-com\example\accountservice\lambda\GetAccounts.class
-com\example\accountservice\domain\AccountStatus.class
-com\example\accountservice\lambda\RepositoryHandler.class
-com\example\accountservice\domain\Account.class
-com\example\accountservice\lambda\PostAccount.class

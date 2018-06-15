@@ -18,26 +18,14 @@
   },
 
   "Resources": {
-    "AccountTable": {
+    "OrderTable": {
       "Type": "AWS::DynamoDB::Table",
       "Properties": {
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 1,
-          "WriteCapacityUnits": 1
-        },
-        "TableName": "account",
+        "TableName": "order",
         "AttributeDefinitions": [
           {
             "AttributeName": "id",
             "AttributeType": "S"
-          },
-          {
-            "AttributeName": "status",
-            "AttributeType": "S"
-          },
-          {
-            "AttributeName": "amount",
-            "AttributeType": "N"
           },
           {
             "AttributeName": "accountId",
@@ -50,6 +38,13 @@
             "KeyType": "HASH"
           }
         ],
+        "StreamSpecification": {
+          "StreamViewType" : "NEW_IMAGE"
+        },
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": "5",
+          "WriteCapacityUnits": "5"
+        },
         "GlobalSecondaryIndexes": [{
           "IndexName": "accountId-index",
           "KeySchema": [
@@ -62,8 +57,8 @@
             "ProjectionType": "ALL"
           },
           "ProvisionedThroughput": {
-            "ReadCapacityUnits": 1,
-            "WriteCapacityUnits": 1
+            "ReadCapacityUnits": "5",
+            "WriteCapacityUnits": "5"
           }
         }]
       }
@@ -72,16 +67,17 @@
     "GetOrderLambda": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
+        "FunctionName": "GetOrderFunction",
         "Code": {
           "S3Bucket": {"Ref": "S3Bucket"},
           "S3Key": {"Ref": "S3Key"}
         },
         "Description": "Returns an order object of specified id",
         "Handler": "com.example.orderservice.lambda.GetOrder::handleRequest",
-        "MemorySize": 128,
+        "MemorySize": 256,
         "Role": {"Fn::GetAtt": ["OrderServiceRole", "Arn"]},
         "Runtime": "java8",
-        "Timeout": 3
+        "Timeout": 15
       }
     },
 
@@ -98,16 +94,17 @@
     "GetOrdersLambda": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
+        "FunctionName": "GetOrdersFunction",
         "Code": {
           "S3Bucket": {"Ref": "S3Bucket"},
           "S3Key": {"Ref": "S3Key"}
         },
         "Description": "Returns limited array of order objects",
         "Handler": "com.example.orderservice.lambda.GetOrders::handleRequest",
-        "MemorySize": 128,
+        "MemorySize": 256,
         "Role": {"Fn::GetAtt": ["OrderServiceRole", "Arn"]},
         "Runtime": "java8",
-        "Timeout": 3
+        "Timeout": 15
       }
     },
 
@@ -124,16 +121,17 @@
     "PostOrderLambda": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
+        "FunctionName": "PostOrderFunction",
         "Code": {
           "S3Bucket": {"Ref": "S3Bucket"},
           "S3Key": {"Ref": "S3Key"}
         },
         "Description": "Saves new order object to db and returns newly saved object",
         "Handler": "com.example.orderservice.lambda.PostOrder::handleRequest",
-        "MemorySize": 128,
+        "MemorySize": 256,
         "Role": {"Fn::GetAtt": ["OrderServiceRole", "Arn"]},
         "Runtime": "java8",
-        "Timeout": 3
+        "Timeout": 15
       }
     },
 
@@ -147,36 +145,87 @@
       }
     },
 
-    "OrderAmountHandlerLambda": {
+    "PublishOrderLambda": {
       "Type": "AWS::Lambda::Function",
       "Properties": {
+        "FunctionName": "PublishOrderFunction",
         "Code": {
           "S3Bucket": {"Ref": "S3Bucket"},
           "S3Key": {"Ref": "S3Key"}
         },
-        "Description": "Completes order if account has enough balance to pay for and cancels if not",
-        "Handler": "com.example.orderservice.lambda.OrderAmountHandler::handleRequest",
-        "MemorySize": 128,
+        "Description": "Publishes new order which was saved to db",
+        "Handler": "com.example.orderservice.lambda.PublishOrder::handleRequest",
+        "MemorySize": 256,
         "Role": {"Fn::GetAtt": ["OrderServiceRole", "Arn"]},
         "Runtime": "java8",
-        "Timeout": 3
+        "Timeout": 15
       }
     },
 
-    "NewOrderTopic": {
+    "NewOrderEventSourceMapping": {
+      "Type": "AWS::Lambda::EventSourceMapping",
+      "Properties": {
+        "BatchSize" : 100,
+        "Enabled" : true,
+        "EventSourceArn" : {"Fn::GetAtt": ["OrderTable", "StreamArn"]},
+        "FunctionName" : { "Fn::GetAtt" : ["PublishOrderLambda", "Arn"] },
+        "StartingPosition" : "LATEST"
+      }
+    },
+
+    "PublishOrderLambdaPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:invokeFunction",
+        "FunctionName": {"Fn::GetAtt": ["PublishOrderLambda", "Arn"]},
+        "Principal": "dynamodb.amazonaws.com",
+        "SourceArn": {"Fn::Join": ["", ["arn:aws:dynamodb:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":", {"Ref": "OrderTable"}, "/*"]]}
+      }
+    },
+
+    "UpdateOrderStatusLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "FunctionName": "UpdateOrderStatusFunction",
+        "Code": {
+          "S3Bucket": {"Ref": "S3Bucket"},
+          "S3Key": {"Ref": "S3Key"}
+        },
+        "Description": "Completes or cancels order by it's status from sns topic",
+        "Handler": "com.example.orderservice.lambda.UpdateOrderStatus::handleRequest",
+        "MemorySize": 256,
+        "Role": {"Fn::GetAtt": ["OrderServiceRole", "Arn"]},
+        "Runtime": "java8",
+        "Timeout": 15
+      }
+    },
+
+    "UpdateOrderStatusLambdaPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:invokeFunction",
+        "FunctionName": {"Fn::GetAtt": ["UpdateOrderStatusLambda", "Arn"]},
+        "Principal": "sns.amazonaws.com",
+        "SourceArn": {
+          "Ref": "CloseOrderTopic"
+        }
+      }
+    },
+
+    "CloseOrderTopic": {
       "Type": "AWS::SNS::Topic",
       "Properties": {
-        "DisplayName" : "new-order",
-        "TopicName": "new-order"
+        "DisplayName" : "close-order",
+        "TopicName": "close-order"
       }
     },
 
-    "NewOrderSubscription": {
+    "CloseOrderTopicSubscription": {
       "Type": "AWS::SNS::Subscription",
       "Properties": {
-        "Endpoint": {"Fn::GetAtt": ["OrderAmountHandlerLambda", "Arn"]},
+        "Endpoint": {"Fn::GetAtt": ["UpdateOrderStatusLambda", "Arn"]},
         "Protocol": "lambda",
-        "TopicArn": {"Ref": "NewOrderTopic"}
+        "TopicArn": {"Ref": "CloseOrderTopic"}
       }
     },
 
@@ -188,83 +237,160 @@
           "Statement": [{
             "Effect": "Allow",
             "Principal": {
-              "Service": "lambda.amazonaws.com"
+              "Service": ["lambda.amazonaws.com"]
             },
             "Action": ["sts:AssumeRole"]
           }]
         },
         "Path": "/",
-        "Policies": [
-          {
-            "PolicyName": "OrderServiceLog",
-            "PolicyDocument": {
-              "Version": "2012-10-17",
-              "Statement": [{
-                "Effect": "Allow",
-                "Action": [
-                  "logs:*"
-                ],
-                "Resource": "arn:aws:logs:*:*:*"
-              }]
-            }
-          },
-          {
-            "PolicyName": "OrderServiceExecute",
-            "PolicyDocument": {
-              "Version": "2012-10-17",
-              "Statement": [
-                {
-                  "Sid": "1",
-                  "Effect": "Allow",
-                  "Action": [
-                    "dynamodb:Scan",
-                    "dynamodb:PutItem",
-                    "dynamodb:GetItem",
-                    "dynamodb:DeleteItem",
-                    "dynamodb:Query",
-                    "dynamodb:UpdateItem",
-                    "dynamodb:DescribeStream",
-                    "dynamodb:GetRecords",
-                    "dynamodb:GetShardIterator",
-                    "dynamodb:ListStreams"
-                  ],
-                  "Resource": [
-                    {"Fn::Join" : ["", ["arn:aws:dynamodb:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":table/order*"]]},
-                    {"Fn::Join" : ["", ["arn:aws:dynamodb:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":table/account*"]]}
-                  ]
-                },
-                {
-                  "Sid": "2",
-                  "Effect": "Allow",
-                  "Action": [
-                    "sns:CreateTopic",
-                    "sns:DeleteTopic",
-                    "sns:Publish",
-                    "sns:ListTopics",
-                    "sns:ListSubscriptionsByTopic",
-                    "sns:GetTopicAttributes",
-                    "sns:SetTopicAttributes"
-                  ],
-                  "Resource": [
-                    {"Fn::Join" : ["", ["arn:aws:sns:", {"Ref": "AWS::Region"}, ":", {"Ref": "AWS::AccountId"}, ":new-order"]]}
-                  ]
-                }
-              ]
-            }
+        "Policies": [{
+          "PolicyName": "OrderServiceExecute",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:Scan",
+                "dynamodb:PutItem",
+                "dynamodb:GetItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:Query",
+                "dynamodb:UpdateItem",
+                "dynamodb:BatchGetItem",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:DescribeStream",
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+                "dynamodb:ListStreams",
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:DescribeAlarmHistory",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:DescribeAlarmsForMetric",
+                "cloudwatch:GetMetricStatistics",
+                "cloudwatch:ListMetrics",
+                "cloudwatch:PutMetricAlarm",
+                "datapipeline:ActivatePipeline",
+                "datapipeline:CreatePipeline",
+                "datapipeline:DeletePipeline",
+                "datapipeline:DescribeObjects",
+                "datapipeline:DescribePipelines",
+                "datapipeline:GetPipelineDefinition",
+                "datapipeline:ListPipelines",
+                "datapipeline:PutPipelineDefinition",
+                "datapipeline:QueryObjects",
+                "iam:GetRole",
+                "iam:ListRoles",
+                "lambda:CreateFunction",
+                "lambda:ListFunctions",
+                "lambda:ListEventSourceMappings",
+                "lambda:CreateEventSourceMapping",
+                "lambda:DeleteEventSourceMapping",
+                "lambda:GetFunctionConfiguration",
+                "lambda:DeleteFunction",
+                "lambda:InvokeAsync",
+                "lambda:InvokeFunction",
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:PutLogEvents",
+                "logs:GetLogEvents",
+                "logs:FilterLogEvents",
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:Publish",
+                "sns:Subscribe",
+                "sns:ListTopics",
+                "sns:ListSubscriptionsByTopic",
+                "sns:GetTopicAttributes",
+                "sns:SetTopicAttributes"
+              ],
+              "Resource": "*"
+            }]
           }
-        ]
+        }]
       }
     },
 
     "OrderServiceRestApi": {
       "Type": "AWS::ApiGateway::RestApi",
       "Properties": {
-        "Name": "API Gateway for Order service",
+        "Name": "Order service REST API",
+        "Description": "Order service REST API used for /order* requests",
         "EndpointConfiguration": {
           "Types": ["REGIONAL"]
         },
         "FailOnWarnings": true
       }
+    },
+
+    "OrderServiceRestApiGatewayAccount": {
+      "Type": "AWS::ApiGateway::Account",
+      "Properties": {
+        "CloudWatchRoleArn": {
+          "Fn::GetAtt": [
+            "OrderServiceRestApiGatewayRole",
+            "Arn"
+          ]
+        }
+      }
+    },
+
+    "OrderServiceRestApiGatewayRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": ["apigateway.amazonaws.com"]
+              },
+              "Action": ["sts:AssumeRole"]
+            }
+          ]
+        },
+        "Policies": [{
+          "PolicyName": "OrderServiceRestApiGatewayCloudWatchLogsPolicy",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Action": [
+                "logs:*"
+              ],
+              "Resource": "arn:aws:logs:*:*:*"
+            }]
+          }
+        }]
+      }
+    },
+
+    "OrderServiceRestApiStage": {
+      "DependsOn": ["OrderServiceRestApiGatewayAccount"],
+      "Type": "AWS::ApiGateway::Stage",
+      "Properties": {
+        "DeploymentId": {
+          "Ref": "OrderServiceRestApiDeployment"
+        },
+        "MethodSettings": [{
+          "ResourcePath": "/*"
+        }],
+        "RestApiId": {
+          "Ref": "OrderServiceRestApi"
+        },
+        "StageName": "api"
+      }
+    },
+
+    "OrderServiceRestApiDeployment": {
+      "Type": "AWS::ApiGateway::Deployment",
+      "Properties": {
+        "RestApiId": {"Ref": "OrderServiceRestApi"},
+        "StageName": "default"
+      },
+      "DependsOn": ["OrderGetMethod", "OrdersGetMethod", "OrderPostMethod"]
     },
 
     "OrderModel": {
@@ -285,14 +411,14 @@
             "status": {
               "type": "string"
             },
-            "amount": {
+            "price": {
               "type": "integer"
             },
             "accountId": {
               "type": "string"
             }
           },
-          "required": ["id", "status", "amount", "accountId"]
+          "required": ["id", "status", "price", "accountId"]
         }
       }
     },
@@ -326,14 +452,14 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "amount": {
+            "price": {
               "type": "integer"
             },
             "accountId": {
               "type": "string"
             }
           },
-          "required": ["amount", "accountId"]
+          "required": ["price", "accountId"]
         }
       }
     },
@@ -359,29 +485,15 @@
           "IntegrationHttpMethod": "POST",
           "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["GetOrdersLambda", "Arn"]}, "/invocations"]]},
           "IntegrationResponses": [{
-            "ResponseTemplates": {
-              "application/json": "$input.json('$.body')"
-            },
-            "ResponseParameters": {
-              "method.response.header.Link": "integration.response.body.headers.next"
-            },
             "StatusCode": 200
-          }],
-          "PassthroughBehavior": "NEVER",
-          "RequestTemplates": {
-            "application/json": "{\"parameters\": {\"limit\": \"$input.params('limit')\", \"next\": \"$input.params('next')\"}}"
-          }
+          }]
         },
-        "RequestParameters": {
-          "method.request.querystring.limit": false,
-          "method.request.querystring.next": false
+        "RequestModels": {
+          "application/json": "Empty"
         },
         "MethodResponses": [{
           "ResponseModels": {
             "application/json": {"Ref": "OrdersModel"}
-          },
-          "ResponseParameters": {
-            "method.response.header.Link": true
           },
           "StatusCode": 200
         }]
@@ -399,32 +511,42 @@
           "Type": "AWS",
           "IntegrationHttpMethod": "POST",
           "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["PostOrderLambda", "Arn"]}, "/invocations"]]},
-          "IntegrationResponses": [{
-            "ResponseTemplates": {
-              "application/json": "{}"
+          "IntegrationResponses": [
+            {
+              "ResponseParameters": {
+                "method.response.header.X-Resource-Id": "integration.response.body.id"
+              },
+              "StatusCode": 201
             },
-            "ResponseParameters": {
-              "method.response.header.Location": "integration.response.body.headers.id"
-            },
-            "StatusCode": 201
-          }],
-          "PassthroughBehavior": "NEVER",
-          "RequestTemplates": {
-            "application/json": "{\"body\": $input.json('$')}"
-          }
+            {
+              "SelectionPattern": "^.*Exception.*$",
+              "ResponseTemplates": {
+                "application/json": "{\"message\":\"Oops, something went wrong when processing your request. Try later\"}"
+              },
+              "StatusCode": 400
+            }
+          ]
         },
         "RequestModels": {
           "application/json": {"Ref": "CreateOrderModel"}
         },
-        "MethodResponses": [{
-          "ResponseModels": {
-            "application/json": "Empty"
+        "MethodResponses": [
+          {
+            "ResponseModels": {
+              "application/json": {"Ref": "OrderModel"}
+            },
+            "ResponseParameters": {
+              "method.response.header.X-Resource-Id": true
+            },
+            "StatusCode": 201
           },
-          "ResponseParameters": {
-            "method.response.header.Location": true
-          },
-          "StatusCode": 201
-        }]
+          {
+            "ResponseModels": {
+              "application/json": "Error"
+            },
+            "StatusCode": 400
+          }
+        ]
       }
     },
 
@@ -448,19 +570,18 @@
           "Type": "AWS",
           "IntegrationHttpMethod": "POST",
           "Uri": {"Fn::Join" : ["", ["arn:aws:apigateway:", {"Ref": "AWS::Region"}, ":lambda:path/2015-03-31/functions/", {"Fn::GetAtt": ["GetOrderLambda", "Arn"]}, "/invocations"]]},
-          "IntegrationResponses": [{
-            "ResponseTemplates": {
-              "application/json": "$input.json('$.body')"
+          "IntegrationResponses": [
+            {
+              "StatusCode": 200
             },
-            "StatusCode": 200
-          }, {
-            "SelectionPattern": "^not found.*",
-            "ResponseTemplates": {
-              "application/json": "{}"
-            },
-            "StatusCode": 404
-          }],
-          "PassthroughBehavior": "NEVER",
+            {
+              "SelectionPattern": "^.*Exception.*$",
+              "ResponseTemplates": {
+                "application/json": "Empty"
+              },
+              "StatusCode": 404
+            }
+          ],
           "RequestTemplates": {
             "application/json": "{\"id\": \"$input.params('orderId')\"}"
           }
@@ -468,34 +589,31 @@
         "RequestParameters": {
           "method.request.path.orderId": true
         },
-        "MethodResponses": [{
-          "ResponseModels": {
-            "application/json": {"Ref": "OrderModel"}
+        "RequestModels": {
+          "application/json": "Empty"
+        },
+        "MethodResponses": [
+          {
+            "ResponseModels": {
+              "application/json": {"Ref": "OrderModel"}
+            },
+            "StatusCode": 200
           },
-          "StatusCode": 200
-        }, {
-          "ResponseModels": {
-            "application/json": "Empty"
-          },
-          "StatusCode": 404
-        }]
+          {
+            "ResponseModels": {
+              "application/json": "Empty"
+            },
+            "StatusCode": 404
+          }
+        ]
       }
-    },
-
-    "OrderServiceRestApiDeployment": {
-      "Type": "AWS::ApiGateway::Deployment",
-      "Properties": {
-        "RestApiId": {"Ref": "OrderServiceRestApi"},
-        "StageName": "prod"
-      },
-      "DependsOn": ["OrderGetMethod", "OrdersGetMethod", "OrderPostMethod"]
     }
   },
 
   "Outputs": {
     "RootUrl": {
       "Description": "Root URL of the Order service API gateway",
-      "Value": {"Fn::Join": ["", ["https://", {"Ref": "OrderServiceRestApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com"]]}
+      "Value": {"Fn::Join": ["", ["https://", {"Ref": "OrderServiceRestApi"}, ".execute-api.", {"Ref": "AWS::Region"}, ".amazonaws.com/", {"Ref": "OrderServiceRestApiStage"}]]}
     }
   }
 }

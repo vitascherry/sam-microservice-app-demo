@@ -9,9 +9,6 @@ public class PostCustomer extends RepositoryHandler<Customer, Customer> {
     public Customer handleRequest(Customer customer, Context context) {
         repository.save(customer);
         Customer e = customer;
-        e.getAccounts().forEach(account -> account.setCustomerId(e.getId()));
-        repository.batchSave(e.getAccounts());
-        e.getAccounts().size(); // force eager loading
         context.getLogger().log("Customer: " + e.getId());
         return e;
     }

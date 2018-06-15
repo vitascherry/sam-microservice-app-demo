@@ -11,13 +11,15 @@ abstract class RepositoryHandler<Input, Output> implements RequestHandler<Input,
 
     DynamoDBMapper repository;
 
+    AmazonDynamoDB dynamoDB;
+
     static final DynamoDBScanExpression LIST_OF_FIVE = new DynamoDBScanExpression().withLimit(5);
 
     RepositoryHandler() {
-        AmazonDynamoDB client = AmazonDynamoDBClientBuilder
+        dynamoDB = AmazonDynamoDBClientBuilder
             .standard()
             .withRegion(Regions.EU_CENTRAL_1)
             .build();
-        repository = new DynamoDBMapper(client);
+        repository = new DynamoDBMapper(dynamoDB);
     }
 }

@@ -24,7 +24,7 @@
     "AccountServiceStack": {
       "Type": "AWS::CloudFormation::Stack",
       "Properties": {
-        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["0", {"Ref" : "S3Artifacts"}]}]]},
+        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["0", {"Ref" : "S3Templates"}]}]]},
         "TimeoutInMinutes": "60",
         "Parameters": {
           "S3Bucket": {"Ref": "S3Bucket"},
@@ -36,7 +36,7 @@
     "CustomerServiceStack": {
       "Type": "AWS::CloudFormation::Stack",
       "Properties": {
-        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["1", {"Ref" : "S3Artifacts"}]}]]},
+        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["1", {"Ref" : "S3Templates"}]}]]},
         "TimeoutInMinutes": "60",
         "Parameters": {
           "S3Bucket": {"Ref": "S3Bucket"},
@@ -48,7 +48,7 @@
     "OrderServiceStack": {
       "Type": "AWS::CloudFormation::Stack",
       "Properties": {
-        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["2", {"Ref" : "S3Artifacts"}]}]]},
+        "TemplateURL": {"Fn::Join": ["", ["https://s3.amazonaws.com/", {"Ref": "S3Bucket"}, "/resources/", {"Fn::Select": ["2", {"Ref" : "S3Templates"}]}]]},
         "TimeoutInMinutes": "60",
         "Parameters": {
           "S3Bucket": {"Ref": "S3Bucket"},
@@ -60,13 +60,13 @@
 
   "Outputs": {
     "AccountServiceStackOutput" : {
-      "Value" : { "Fn::GetAtt" : [ "OrderServiceStack", "Outputs.RootUrl" ] }
-    },
-    "OrderServiceStackOutput": {
       "Value" : { "Fn::GetAtt" : [ "AccountServiceStack", "Outputs.RootUrl" ] }
     },
     "CustomerServiceStackOutput" : {
       "Value" : { "Fn::GetAtt" : [ "CustomerServiceStack", "Outputs.RootUrl" ] }
+    },
+    "OrderServiceStackOutput": {
+      "Value" : { "Fn::GetAtt" : [ "OrderServiceStack", "Outputs.RootUrl" ] }
     }
   }
 }

@@ -10,7 +10,7 @@ public class GetAccounts extends RepositoryHandler<Void, List<Account>> {
     @Override
     public List<Account> handleRequest(Void aVoid, Context context) {
         List<Account> accounts = repository.scan(Account.class, LIST_OF_FIVE);
-        context.getLogger().log("Fetched " + accounts.size() + " accounts");
+        context.getLogger().log("Fetched accounts" + accounts.size());
         return accounts;
     }
 }

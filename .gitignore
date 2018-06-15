@@ -3,7 +3,9 @@
 *.iml
 
 # Compiled class file
+**/target
 **/*.class
+**/*.lst
 
 # Log file
 **/*.log
